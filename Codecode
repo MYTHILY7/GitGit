@@ -1,0 +1,119 @@
+from sqlalchemy import Column, Integer, String, Float, Boolean, create_engine
+from sqlalchemy.orm import declarative_base, sessionmaker
+
+DATABASE_URL = "sqlite:///./menu.db"
+
+Base = declarative_base()
+engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+
+class MenuItem(Base):
+    __tablename__ = "menu_items"
+    item_id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    description = Column(String)
+    price = Column(Float, nullable=False)
+    category = Column(String, nullable=False)
+    cuisine = Column(String)
+    is_available = Column(Boolean, default=True)
+
+# Create table
+Base.metadata.create_all(bind=engine)
+
+
+
+from pydantic import BaseModel, Field
+from typing import Optional
+
+class MenuBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+    price: float = Field(..., ge=0)
+    category: str
+    cuisine: str
+    is_available: bool = True
+
+class MenuItemOut(MenuBase):
+    item_id: int
+    class Config:
+        orm_mode = True
+
+class MenuItemUpdate(BaseModel):
+    name: Optional[str]
+    price: Optional[float] = Field(None, ge=0)
+    category: Optional[str]
+
+class AvailabilityUpdate(BaseModel):
+    is_available: bool
+
+
+
+from fastapi import FastAPI, HTTPException, Depends, Query
+from sqlalchemy.orm import Session
+from fastapi_model import MenuItem, SessionLocal
+from schema import MenuBase, MenuItemOut, MenuItemUpdate, AvailabilityUpdate
+from typing import List
+
+app = FastAPI()
+
+# DB Dependency
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+# 1. Create a new item
+@app.post("/menu/", response_model=MenuItemOut)
+def create_menu_item(item: MenuBase, db: Session = Depends(get_db)):
+    new_item = MenuItem(**item.model_dump())
+    db.add(new_item)
+    db.commit()
+    db.refresh(new_item)
+    return new_item
+
+# 2. List all items
+@app.get("/menu/", response_model=List[MenuItemOut])
+def list_menu_items(db: Session = Depends(get_db)):
+    return db.query(MenuItem).all()
+
+# 3. Retrieve item by ID
+@app.get("/menu/{item_id}", response_model=MenuItemOut)
+def get_item(item_id: int, db: Session = Depends(get_db)):
+    item = db.query(MenuItem).filter(MenuItem.item_id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    return item
+
+# 4. Update item details (name, category, price)
+@app.put("/menu/{item_id}", response_model=MenuItemOut)
+def update_item(item_id: int, update: MenuItemUpdate, db: Session = Depends(get_db)):
+    item = db.query(MenuItem).filter(MenuItem.item_id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    update_data = update.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(item, key, value)
+    db.commit()
+    db.refresh(item)
+    return item
+
+# 5. PATCH - Mark item as available/unavailable
+@app.patch("/menu/{item_id}/availability", response_model=MenuItemOut)
+def update_availability(item_id: int, patch: AvailabilityUpdate, db: Session = Depends(get_db)):
+    item = db.query(MenuItem).filter(MenuItem.item_id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    item.is_available = patch.is_available
+    db.commit()
+    db.refresh(item)
+    return item
+
+# 6. Filter by category
+@app.get("/menu/category/", response_model=List[MenuItemOut])
+def filter_by_category(category: str = Query(...), db: Session = Depends(get_db)):
+    items = db.query(MenuItem).filter(MenuItem.category.ilike(category)).all()
+    if not items:
+        raise HTTPException(status_code=404, detail="No items found in this category")
+    return items
