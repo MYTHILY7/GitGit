@@ -216,3 +216,129 @@ if __name__ == "__main__":
     filter_by_category("starter")
     delete_item(1)
     list_items()
+
+
+
+# client.py
+
+import requests
+
+BASE_URL = "http://127.0.0.1:8000"
+
+def create_item():
+    print("\n--- Add New Menu Item ---")
+    name = input("Name: ")
+    desc = input("Description: ")
+    price = float(input("Price: "))
+    category = input("Category: ")
+    cuisine = input("Cuisine: ")
+    rating = input("Rating (0-5 or leave blank): ")
+
+    payload = {
+        "name": name,
+        "description": desc,
+        "price": price,
+        "category": category,
+        "cuisine": cuisine,
+        "rating": float(rating) if rating else None
+    }
+
+    res = requests.post(f"{BASE_URL}/menu/", json=payload)
+    print("Response:", res.json())
+
+def list_items():
+    print("\n--- All Menu Items ---")
+    res = requests.get(f"{BASE_URL}/menu/")
+    items = res.json()
+    if not items:
+        print("No items found.")
+    for item in items:
+        print(item)
+
+def get_item():
+    item_id = input("Enter item ID: ")
+    res = requests.get(f"{BASE_URL}/menu/{item_id}")
+    if res.status_code == 200:
+        print(res.json())
+    else:
+        print("Error:", res.json().get("detail"))
+
+def update_item():
+    print("\n--- Update Menu Item ---")
+    item_id = input("Enter item ID to update: ")
+    name = input("New Name: ")
+    desc = input("New Description: ")
+    price = float(input("New Price: "))
+    category = input("New Category: ")
+    cuisine = input("New Cuisine: ")
+    rating = input("New Rating (0-5 or leave blank): ")
+
+    payload = {
+        "name": name,
+        "description": desc,
+        "price": price,
+        "category": category,
+        "cuisine": cuisine,
+        "rating": float(rating) if rating else None
+    }
+
+    res = requests.put(f"{BASE_URL}/menu/{item_id}", json=payload)
+    print("Response:", res.json())
+
+def toggle_availability():
+    item_id = input("Enter item ID: ")
+    status = input("Available? (yes/no): ").lower()
+    available = True if status == "yes" else False
+    res = requests.patch(f"{BASE_URL}/menu/{item_id}/availability", params={"available": available})
+    print("Response:", res.json())
+
+def filter_by_category():
+    category = input("Enter category to filter: ")
+    res = requests.get(f"{BASE_URL}/menu/category/", params={"category": category})
+    if res.status_code == 200:
+        for item in res.json():
+            print(item)
+    else:
+        print("Error:", res.json().get("detail"))
+
+def delete_item():
+    item_id = input("Enter item ID to delete: ")
+    res = requests.delete(f"{BASE_URL}/menu/{item_id}")
+    print("Response:", res.json())
+
+def main():
+    while True:
+        print("\n========= Restaurant Menu Manager =========")
+        print("1. Add new menu item")
+        print("2. List all items")
+        print("3. Get item by ID")
+        print("4. Update item")
+        print("5. Mark item as available/unavailable")
+        print("6. Filter items by category")
+        print("7. Delete item")
+        print("0. Exit")
+
+        choice = input("Enter your choice: ")
+
+        if choice == "1":
+            create_item()
+        elif choice == "2":
+            list_items()
+        elif choice == "3":
+            get_item()
+        elif choice == "4":
+            update_item()
+        elif choice == "5":
+            toggle_availability()
+        elif choice == "6":
+            filter_by_category()
+        elif choice == "7":
+            delete_item()
+        elif choice == "0":
+            print("Exiting. Goodbye!")
+            break
+        else:
+            print("Invalid choice. Try again.")
+
+if __name__ == "__main__":
+    main()
